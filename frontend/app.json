@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "Zapp Pay",
+    "slug": "zapp-pay",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/logo_3d.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/images/logo_transparent.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#090D28"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.zapppay.app"
+    },
+    "android": {
+      "package": "com.zapppay.app",
+      "versionCode": 1,
+      "usesCleartextTraffic": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/logo_transparent.png",
+        "backgroundColor": "#090D28"
+      },
+      "permissions": [
+        "INTERNET"
+      ]
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}

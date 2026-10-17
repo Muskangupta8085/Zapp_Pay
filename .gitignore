@@ -1,0 +1,61 @@
+# Dependencies
+node_modules/
+*/node_modules/
+.pnp
+.pnp.js
+
+# Environment Variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*/.env
+*/.env.local
+
+# Expo & Metro
+.expo/
+*/.expo/
+.expo-shared/
+dist/
+*/dist/
+web-build/
+
+# Android build outputs & Gradle cache
+android/.gradle/
+*/android/.gradle/
+android/app/build/
+*/android/app/build/
+android/build/
+*/android/build/
+.gradle/
+*.apk
+*.aab
+*.ap_
+*.dex
+app-release.apk
+
+# Keystores & sensitive signing credentials
+*.jks
+*.keystore
+!debug.keystore
+
+# iOS build outputs
+ios/Pods/
+ios/build/
+*.ipa
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
