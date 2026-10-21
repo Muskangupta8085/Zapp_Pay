@@ -6,6 +6,20 @@ import { logger } from './utils/logger.js';
 import { seedDatabaseIfEmpty } from './utils/seeder.js';
 import { ReconciliationService } from './services/reconciliation.service.js';
 
+import os from 'os';
+
+const getLanIp = (): string => {
+  const ifaces = os.networkInterfaces();
+  for (const name of Object.keys(ifaces)) {
+    for (const net of ifaces[name] || []) {
+      if (net.family === 'IPv4' && !net.internal) {
+        return net.address;
+      }
+    }
+  }
+  return 'localhost';
+};
+
 const startServer = async () => {
   try {
     // Attempt database connection
@@ -16,9 +30,10 @@ const startServer = async () => {
     ReconciliationService.startReconciliationWorker();
 
     const server = app.listen(ENV.PORT, '0.0.0.0', () => {
+      const lanIp = getLanIp();
       logger.info(`🚀 Zapp Pay Backend running on port ${ENV.PORT} [${ENV.NODE_ENV}]`);
       logger.info(`📡 Local Health Check: http://localhost:${ENV.PORT}/api/v1/health`);
-      logger.info(`📱 LAN Health Check: http://192.168.1.22:${ENV.PORT}/api/v1/health`);
+      logger.info(`📱 LAN Health Check: http://${lanIp}:${ENV.PORT}/api/v1/health`);
     });
 
     // Graceful shutdown handling
