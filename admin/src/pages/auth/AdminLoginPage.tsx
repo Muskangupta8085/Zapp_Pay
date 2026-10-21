@@ -30,6 +30,7 @@ export const AdminLoginPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [focusedField, setFocusedField] = useState<'email' | 'password' | null>(null);
+  const [filledFeedback, setFilledFeedback] = useState(false);
 
   // Ensure fields start clean on initial mount to prevent aggressive browser autofill
   useEffect(() => {
@@ -45,6 +46,8 @@ export const AdminLoginPage: React.FC = () => {
     setEmail(fillEmail);
     setPassword(fillPass);
     setErrorMessage('');
+    setFilledFeedback(true);
+    setTimeout(() => setFilledFeedback(false), 2500);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -128,6 +131,25 @@ export const AdminLoginPage: React.FC = () => {
         .login-submit-btn:hover {
           transform: translateY(-1.5px);
           box-shadow: 0 10px 24px -2px rgba(99, 102, 241, 0.45);
+        }
+        .auth-card {
+          color-scheme: light !important;
+        }
+        .auth-card input,
+        .auth-card input.form-input {
+          color: #0F172A !important;
+          -webkit-text-fill-color: #0F172A !important;
+        }
+        .auth-card input::placeholder {
+          color: #94A3B8 !important;
+          -webkit-text-fill-color: #94A3B8 !important;
+          opacity: 1 !important;
+        }
+        .auth-card h2 {
+          color: #0F172A !important;
+        }
+        .auth-card p {
+          color: #64748B !important;
         }
       `}</style>
 
@@ -560,7 +582,7 @@ export const AdminLoginPage: React.FC = () => {
         boxSizing: 'border-box',
         height: '100vh'
       }}>
-        <div style={{
+        <div className="auth-card" style={{
           width: '100%',
           maxWidth: '430px',
           backgroundColor: '#FFFFFF',
@@ -568,7 +590,8 @@ export const AdminLoginPage: React.FC = () => {
           padding: '36px 34px',
           boxShadow: '0 20px 50px -10px rgba(100, 116, 139, 0.15), 0 0 0 1px rgba(241, 245, 249, 0.9)',
           position: 'relative',
-          boxSizing: 'border-box'
+          boxSizing: 'border-box',
+          colorScheme: 'light'
         }}>
           {/* Header Row: Logo & Admin Gateway Pill */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
@@ -632,23 +655,25 @@ export const AdminLoginPage: React.FC = () => {
                 onClick={() => handleQuickFill('admin@zappay.com', 'admin123')}
                 style={{
                   flex: 1,
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  backgroundColor: '#FFFFFF',
-                  border: '1px solid #E2E8F0',
+                  padding: '9px 12px',
+                  borderRadius: '10px',
+                  backgroundColor: filledFeedback ? '#EEF2FF' : '#FFFFFF',
+                  border: filledFeedback ? '1.5px solid #6366F1' : '1px solid #CBD5E1',
                   fontSize: '12px',
                   fontWeight: '700',
-                  color: '#334155',
+                  color: filledFeedback ? '#4F46E5' : '#1E293B',
                   cursor: 'pointer',
-                  transition: 'all 0.15s ease',
+                  transition: 'all 0.18s ease',
                   textAlign: 'center',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '6px'
+                  gap: '6px',
+                  boxShadow: filledFeedback ? '0 0 0 3px rgba(99, 102, 241, 0.2)' : '0 1px 3px rgba(15, 23, 42, 0.06)'
                 }}
               >
-                <span>👑</span> Super Admin (admin@zappay.com)
+                <span>{filledFeedback ? '✨' : '👑'}</span>
+                <span>{filledFeedback ? '✓ Auto-Filled! (Click Login to proceed)' : 'Super Admin (admin@zappay.com)'}</span>
               </button>
             </div>
           </div>
@@ -709,6 +734,7 @@ export const AdminLoginPage: React.FC = () => {
                     borderRadius: '12px',
                     borderColor: focusedField === 'email' ? '#4F46E5' : '#E2E8F0',
                     backgroundColor: focusedField === 'email' ? '#FFFFFF' : '#F8FAFC',
+                    color: '#0F172A',
                     boxShadow: focusedField === 'email' ? '0 0 0 3px rgba(99, 102, 241, 0.15)' : 'none',
                     transition: 'all 0.2s ease',
                     width: '100%',
@@ -765,6 +791,7 @@ export const AdminLoginPage: React.FC = () => {
                     borderRadius: '12px',
                     borderColor: focusedField === 'password' ? '#4F46E5' : '#E2E8F0',
                     backgroundColor: focusedField === 'password' ? '#FFFFFF' : '#F8FAFC',
+                    color: '#0F172A',
                     boxShadow: focusedField === 'password' ? '0 0 0 3px rgba(99, 102, 241, 0.15)' : 'none',
                     transition: 'all 0.2s ease',
                     width: '100%',
