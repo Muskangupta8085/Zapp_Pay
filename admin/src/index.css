@@ -247,9 +247,24 @@ body {
   }
   .main-content {
     margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .page-body {
+    padding: 16px 14px 40px !important;
   }
   .mobile-menu-btn {
     display: flex !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .page-body {
+    padding: 12px 10px 32px !important;
+  }
+  .card {
+    padding: 16px 14px !important;
+    border-radius: 12px !important;
   }
 }
 

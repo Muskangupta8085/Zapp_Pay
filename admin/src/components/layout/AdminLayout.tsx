@@ -28,15 +28,7 @@ const AdminLayoutContent: React.FC = () => {
       <Sidebar />
 
       {/* Main App Content Area */}
-      <div
-        className={`main-content ${isCollapsed ? 'collapsed' : ''}`}
-        style={{
-          marginLeft: isCollapsed ? '78px' : '260px',
-          width: isCollapsed ? 'calc(100% - 78px)' : 'calc(100% - 260px)',
-          maxWidth: isCollapsed ? 'calc(100% - 78px)' : 'calc(100% - 260px)',
-          minWidth: 0,
-        }}
-      >
+      <div className={`main-content ${isCollapsed ? 'collapsed' : ''}`}>
         <Header />
         <main className="page-body">
           <Outlet />

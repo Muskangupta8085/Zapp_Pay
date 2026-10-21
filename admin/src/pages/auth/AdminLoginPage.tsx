@@ -78,18 +78,21 @@ export const AdminLoginPage: React.FC = () => {
   };
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      height: '100vh',
-      width: '100vw',
-      display: 'flex',
-      backgroundColor: '#EFF3FC',
-      background: 'linear-gradient(135deg, #F3F6FD 0%, #ECEFFB 35%, #E3E3FD 70%, #DDD5FC 100%)',
-      fontFamily: 'var(--font-sans)',
-      overflow: 'hidden',
-      position: 'relative',
-      boxSizing: 'border-box'
-    }}>
+    <div
+      className="login-page-container"
+      style={{
+        minHeight: '100vh',
+        width: '100vw',
+        display: 'flex',
+        backgroundColor: '#EFF3FC',
+        background: 'linear-gradient(135deg, #F3F6FD 0%, #ECEFFB 35%, #E3E3FD 70%, #DDD5FC 100%)',
+        fontFamily: 'var(--font-sans)',
+        overflowX: 'hidden',
+        overflowY: 'auto',
+        position: 'relative',
+        boxSizing: 'border-box'
+      }}
+    >
       {/* Background Ambient Decorative Waves and Gradients */}
       <style>{`
         @keyframes floatDeviceScreen {
@@ -151,6 +154,43 @@ export const AdminLoginPage: React.FC = () => {
         .auth-card p {
           color: #64748B !important;
         }
+        @media (max-width: 1024px) {
+          .login-page-container {
+            flex-direction: column !important;
+            overflow-y: auto !important;
+            height: auto !important;
+            min-height: 100vh !important;
+          }
+          .login-showcase-section {
+            display: none !important;
+          }
+          .login-auth-section {
+            flex: 1 !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 100vh !important;
+            padding: 40px 20px !important;
+          }
+          .auth-card {
+            max-width: 460px !important;
+            width: 100% !important;
+            padding: 30px 24px !important;
+            border-radius: 20px !important;
+            margin: auto !important;
+          }
+        }
+        @media (max-width: 480px) {
+          .login-auth-section {
+            padding: 24px 12px !important;
+          }
+          .auth-card {
+            padding: 24px 16px !important;
+            border-radius: 18px !important;
+          }
+          .auth-card h2 {
+            font-size: 21px !important;
+          }
+        }
       `}</style>
 
       {/* Decorative Wave Curves at Bottom-Left */}
@@ -183,17 +223,20 @@ export const AdminLoginPage: React.FC = () => {
       {/* ======================================================== */}
       {/* LEFT SHOWCASE SECTION (Matches Screenshot 100%)          */}
       {/* ======================================================== */}
-      <div style={{
-        flex: '1.25',
-        padding: '36px 48px',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
-        position: 'relative',
-        zIndex: 10,
-        boxSizing: 'border-box',
-        height: '100vh'
-      }}>
+      <div
+        className="login-showcase-section"
+        style={{
+          flex: '1.25',
+          padding: '36px 48px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          position: 'relative',
+          zIndex: 10,
+          boxSizing: 'border-box',
+          minHeight: '100vh'
+        }}
+      >
         {/* Top Header: Logo */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <ZappPayLogo variant="full" size="md" mode="light" />
@@ -571,17 +614,20 @@ export const AdminLoginPage: React.FC = () => {
       {/* ======================================================== */}
       {/* RIGHT AUTHENTICATION CARD (Matches Screenshot 100%)      */}
       {/* ======================================================== */}
-      <div style={{
-        flex: '0.95',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '24px 40px',
-        position: 'relative',
-        zIndex: 10,
-        boxSizing: 'border-box',
-        height: '100vh'
-      }}>
+      <div
+        className="login-auth-section"
+        style={{
+          flex: '0.95',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '24px 40px',
+          position: 'relative',
+          zIndex: 10,
+          boxSizing: 'border-box',
+          minHeight: '100vh'
+        }}
+      >
         <div className="auth-card" style={{
           width: '100%',
           maxWidth: '430px',
