@@ -96,6 +96,13 @@ export const adminApi = {
     return apiRequest(`/admin/orders?${query.toString()}`);
   },
 
+  async updateOrderStatus(orderId: string, status: string, note?: string) {
+    return apiRequest(`/admin/orders/${orderId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, note }),
+    });
+  },
+
   async getTreasuryVaults() {
     return apiRequest('/admin/treasury/vaults');
   },

@@ -44,6 +44,70 @@ export interface OrderItem {
   timeRemaining?: string;
 }
 
+const DEFAULT_ORDERS: OrderItem[] = [
+  {
+    id: 'ORD-89421',
+    type: 'Buy',
+    token: 'xCoin',
+    cryptoAmount: '+461.38 xCoin',
+    fiatAmount: '₹ 50,000.00',
+    rate: '₹ 108.37 / coin',
+    status: 'Completed',
+    date: 'Today, 01:24 PM',
+    method: 'Instant UPI (PhonePe)',
+    methodIcon: 'flash-outline',
+    txHash: '0x8f2a931cb941e982cba190a42',
+    fee: '₹ 0.00 (Zero Fee)',
+    counterparty: 'Zapp Escrow Liquidity Node',
+  },
+  {
+    id: 'ORD-89420',
+    type: 'Sell',
+    token: 'xCoin',
+    cryptoAmount: '-1,153.45 xCoin',
+    fiatAmount: '₹ 1,25,000.00',
+    rate: '₹ 108.37 / coin',
+    status: 'Processing',
+    date: 'Today, 12:55 PM',
+    method: 'IMPS Direct Bank',
+    methodIcon: 'card-outline',
+    txHash: '0x992b10492cb94819ca10892f',
+    fee: '₹ 10.00',
+    counterparty: 'HDFC IMPS Gateway Node',
+    timeRemaining: '04:12 mins',
+  },
+  {
+    id: 'ORD-89419',
+    type: 'Buy',
+    token: 'USDT',
+    cryptoAmount: '+1,000.00 USDT',
+    fiatAmount: '₹ 88,500.00',
+    rate: '₹ 88.50 / coin',
+    status: 'Completed',
+    date: 'Today, 11:42 AM',
+    method: 'Web3 Escrow Transfer',
+    methodIcon: 'globe-outline',
+    txHash: '0x33b8192a9cb981929381924a',
+    fee: '₹ 0.00 (Zero Fee)',
+    counterparty: 'Polygon Network Bridge',
+  },
+  {
+    id: 'ORD-89418',
+    type: 'Sell',
+    token: 'xCoin',
+    cryptoAmount: '-300.00 xCoin',
+    fiatAmount: '₹ 32,511.00',
+    rate: '₹ 108.37 / coin',
+    status: 'Completed',
+    date: 'Yesterday, 04:30 PM',
+    method: 'Google Pay UPI',
+    methodIcon: 'flash-outline',
+    txHash: '0xaa1948291039841829183921',
+    fee: '₹ 10.00',
+    counterparty: 'Axis Bank UPI Switch',
+  },
+];
+
 export const OrdersScreen: React.FC<OrdersScreenProps> = ({
   onNavigateToProfile,
   onNavigateToBuy,
@@ -69,8 +133,8 @@ export const OrdersScreen: React.FC<OrdersScreenProps> = ({
   const [exportFormat, setExportFormat] = useState<'CSV' | 'PDF'>('PDF');
   const [exportRange, setExportRange] = useState<'30D' | '90D' | 'ALL'>('30D');
 
-  // Master Order Book Dataset - Fetched from backend
-  const [orders, setOrders] = useState<OrderItem[]>([]);
+  // Master Order Book Dataset - Initialized with fallback orders
+  const [orders, setOrders] = useState<OrderItem[]>(DEFAULT_ORDERS);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
   const [xCoinRate, setXCoinRate] = useState(108.37);
 
