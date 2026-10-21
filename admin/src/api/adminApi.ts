@@ -97,9 +97,23 @@ export const adminApi = {
   },
 
   async updateOrderStatus(orderId: string, status: string, note?: string) {
-    return apiRequest(`/admin/orders/${orderId}/status`, {
+    return apiRequest(`/admin/orders/${encodeURIComponent(orderId)}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status, note }),
+    });
+  },
+
+  async uploadOrderProof(orderId: string, payload: { proofUrl: string; utrNumber?: string; verifiedAmount?: number; notes?: string }) {
+    return apiRequest(`/admin/orders/${encodeURIComponent(orderId)}/proof`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async disputeOrder(orderId: string, payload: { reason: string; details?: string; resolution?: string }) {
+    return apiRequest(`/admin/orders/${encodeURIComponent(orderId)}/dispute`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
     });
   },
 

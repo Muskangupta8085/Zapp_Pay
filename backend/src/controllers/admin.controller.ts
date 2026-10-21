@@ -1169,7 +1169,6 @@ export class AdminController {
   }
 
   static async listOrders(
-
     req: AuthenticatedRequest,
     res: Response,
     next: NextFunction
@@ -1193,17 +1192,21 @@ export class AdminController {
       let allCount = 0;
       let buyCount = 0;
       let sellCount = 0;
+      let p2pCount = 0;
 
       const formattedOrders: any[] = [];
 
       allTrades.forEach((tx: any) => {
         const userObj = tx.senderId || tx.receiverId;
         const userName = userObj?.fullName || userObj?.email?.split('@')[0] || tx.senderAddress || tx.receiverAddress || 'Trader';
-        
-        let orderType: 'Buy' | 'Sell' = 'Buy';
-        if (tx.type === 'trade') {
+        const notesStr = String(tx.notes || '');
+
+        let orderType: 'Buy' | 'Sell' | 'P2P Claim' = 'Buy';
+        if (notesStr.toUpperCase().includes('P2P') || tx.type === 'transfer') {
+          orderType = 'P2P Claim';
+        } else if (tx.type === 'trade') {
           orderType = tradeSide(tx.notes) === 'sell' ? 'Sell' : 'Buy';
-        } else if (tx.type === 'withdrawal' || tx.type === 'transfer') {
+        } else if (tx.type === 'withdrawal') {
           orderType = 'Sell';
         } else {
           orderType = 'Buy';
@@ -1211,16 +1214,19 @@ export class AdminController {
 
         allCount++;
         if (orderType === 'Buy') buyCount++;
-        else sellCount++;
+        else if (orderType === 'Sell') sellCount++;
+        else p2pCount++;
 
         const symbol = String(tx.symbol || 'INR').toUpperCase();
         const currentRate = rates[symbol] || zapRate;
         const xcoinAmount = symbol === 'ZAP' ? tx.amount : symbol === 'INR' ? (tx.amount / zapRate) : (tx.amount * currentRate / zapRate);
         const unitPrice = symbol === 'ZAP' ? zapRate : currentRate;
+        const platformFeeVal = tx.fee || Math.round((tx.amount * 0.015) * 100) / 100;
 
         const statusMap: Record<string, string> = {
           completed: 'Completed',
           pending: 'Pending',
+          processing: 'Processing',
           failed: 'Failed',
           cancelled: 'Cancelled',
         };
@@ -1229,26 +1235,62 @@ export class AdminController {
         const dateObj = new Date(tx.createdAt);
         const formattedDate = dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' + dateObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
+        let proofUrl = '';
+        let utrNumber = '';
+        let disputeReason = '';
+        let disputeStatus = '';
+
+        if (notesStr.includes('[UPI_PROOF]')) {
+          const matchUtr = notesStr.match(/UTR:([^|]+)/);
+          const matchUrl = notesStr.match(/URL:([^|]+)/);
+          if (matchUtr) utrNumber = matchUtr[1].trim();
+          if (matchUrl) proofUrl = matchUrl[1].trim();
+        }
+
+        if (notesStr.includes('[DISPUTE]')) {
+          const matchReason = notesStr.match(/Reason:([^|]+)/);
+          if (matchReason) disputeReason = matchReason[1].trim();
+          disputeStatus = 'Open';
+        }
+
         formattedOrders.push({
           id: formattedOrders.length + 1,
           orderId: tx.referenceId || `ZC${tx._id.toString().slice(-5).toUpperCase()}`,
+          dbId: tx._id.toString(),
           user: userName,
           email: userObj?.email || '',
+          phone: userObj?.phone || '',
           type: orderType,
           amount: formatInr(tx.amount),
           rawAmount: tx.amount,
+          tokenAmount: Number(xcoinAmount.toFixed(2)),
           xcoin: xcoinAmount.toFixed(2),
           price: formatInr(unitPrice),
+          inrRate: unitPrice,
+          platformFee: formatInr(platformFeeVal),
+          rawPlatformFee: platformFeeVal,
+          totalAmount: formatInr(tx.amount),
+          rawTotalAmount: tx.amount,
+          paymentMethod: detectMethod(tx.notes),
+          paymentProofUrl: proofUrl,
+          utrNumber: utrNumber || (tx.txHash ? tx.txHash : ''),
+          disputeReason,
+          disputeStatus,
           status: orderStatus,
           dateTime: formattedDate,
           rawDate: tx.createdAt,
+          notes: tx.notes || '',
         });
       });
 
       // Apply filtering
       let filtered = formattedOrders;
       if (type !== 'All') {
-        filtered = filtered.filter((o) => o.type === type);
+        if (type === 'P2P' || type === 'P2P Claim' || type === 'P2P Claims') {
+          filtered = filtered.filter((o) => o.type === 'P2P Claim');
+        } else {
+          filtered = filtered.filter((o) => o.type === type);
+        }
       }
       if (statusFilter !== 'All') {
         filtered = filtered.filter((o) => o.status.toLowerCase() === statusFilter.toLowerCase());
@@ -1259,7 +1301,8 @@ export class AdminController {
           (o) =>
             o.orderId.toLowerCase().includes(q) ||
             o.user.toLowerCase().includes(q) ||
-            o.email.toLowerCase().includes(q)
+            o.email.toLowerCase().includes(q) ||
+            (o.utrNumber && o.utrNumber.toLowerCase().includes(q))
         );
       }
 
@@ -1272,7 +1315,140 @@ export class AdminController {
             total: allCount,
             buy: buyCount,
             sell: sellCount,
+            p2p: p2pCount,
           },
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async updateOrderStatus(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { id } = req.params;
+      const { status, note } = req.body;
+
+      const normalizedStatus = String(status).toLowerCase();
+      if (!['completed', 'failed', 'cancelled', 'processing', 'pending'].includes(normalizedStatus)) {
+        throw ApiError.badRequest('Invalid order status provided');
+      }
+
+      const tx = await Transaction.findOne({
+        $or: [
+          { referenceId: id },
+          Types.ObjectId.isValid(id) ? { _id: id } : { referenceId: id }
+        ]
+      });
+
+      if (!tx) {
+        throw ApiError.notFound('Order not found');
+      }
+
+      if (tx.status === 'completed' || tx.status === 'failed' || tx.status === 'cancelled') {
+        throw ApiError.badRequest(`Order is already in terminal state '${tx.status}'`);
+      }
+
+      const previousStatus = tx.status;
+      tx.status = normalizedStatus as any;
+      if (note) {
+        tx.notes = tx.notes ? `${tx.notes} | ${note}` : note;
+      }
+      await tx.save();
+
+      await logAdminAction(req, `Updated Order Status to ${status}`, `Order:${tx.referenceId}`, {
+        resourceId: tx._id.toString(),
+        details: { previousStatus, newStatus: status, amount: tx.amount },
+      });
+
+      sendResponse({
+        res,
+        message: `Order ${tx.referenceId} status updated to ${status}`,
+        data: tx,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async uploadOrderProof(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { id } = req.params;
+      const { proofUrl, utrNumber, verifiedAmount, notes } = req.body;
+
+      const tx = await Transaction.findOne({
+        $or: [
+          { referenceId: id },
+          Types.ObjectId.isValid(id) ? { _id: id } : { referenceId: id }
+        ]
+      });
+
+      if (!tx) {
+        throw ApiError.notFound('Order not found');
+      }
+
+      const proofNote = `[UPI_PROOF] UTR:${utrNumber || 'N/A'} | URL:${proofUrl} | Amt:${verifiedAmount || tx.amount}${notes ? ` | ${notes}` : ''}`;
+      tx.notes = tx.notes ? `${tx.notes} | ${proofNote}` : proofNote;
+      await tx.save();
+
+      sendResponse({
+        res,
+        message: 'Payment proof attached successfully',
+        data: {
+          orderId: tx.referenceId,
+          proofUrl,
+          utrNumber,
+          status: tx.status,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async disputeOrder(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { id } = req.params;
+      const { reason, details, resolution } = req.body;
+
+      const tx = await Transaction.findOne({
+        $or: [
+          { referenceId: id },
+          Types.ObjectId.isValid(id) ? { _id: id } : { referenceId: id }
+        ]
+      });
+
+      if (!tx) {
+        throw ApiError.notFound('Order not found');
+      }
+
+      const disputeNote = `[DISPUTE] Reason:${reason || 'General Dispute'}${details ? ` | ${details}` : ''}${resolution ? ` | Resolution:${resolution}` : ''}`;
+      tx.notes = tx.notes ? `${tx.notes} | ${disputeNote}` : disputeNote;
+      await tx.save();
+
+      await logAdminAction(req, `Dispute Action on Order`, `Order:${tx.referenceId}`, {
+        resourceId: tx._id.toString(),
+        details: { reason, details, resolution },
+      });
+
+      sendResponse({
+        res,
+        message: 'Dispute recorded successfully',
+        data: {
+          orderId: tx.referenceId,
+          dispute: { reason, details, resolution },
         },
       });
     } catch (error) {

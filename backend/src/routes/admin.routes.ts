@@ -74,6 +74,21 @@ router.patch(
   authorizeRoles('admin', 'superadmin'),
   AdminController.updateTransactionStatus
 );
+router.patch(
+  '/orders/:id/status',
+  authorizeRoles('admin', 'superadmin'),
+  AdminController.updateOrderStatus
+);
+router.post(
+  '/orders/:id/proof',
+  authorizeRoles('admin', 'superadmin', 'moderator'),
+  AdminController.uploadOrderProof
+);
+router.post(
+  '/orders/:id/dispute',
+  authorizeRoles('admin', 'superadmin', 'moderator'),
+  AdminController.disputeOrder
+);
 router.post(
   '/team/referrals/bonus',
   authorizeRoles('admin', 'superadmin'),
