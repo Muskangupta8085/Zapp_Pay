@@ -152,8 +152,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
         setUser(backendAdmin);
         return { success: true };
-      } else if (res.error && !res.error.toLowerCase().includes('network error')) {
-        // Backend actively returned an authentication rejection (e.g. 401, 403, 400)
+      } else if (
+        res.error &&
+        res.status !== undefined &&
+        res.status >= 400 &&
+        res.status < 500
+      ) {
+        // Backend server is alive and actively returned a 4xx credential rejection
         return { success: false, error: res.error };
       }
     } catch {
