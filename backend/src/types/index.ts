@@ -13,6 +13,7 @@ export interface TokenPayload {
   email?: string;
   phone?: string;
   role: UserRole;
+  tokenVersion?: number;
 }
 
 export interface AuthenticatedRequest extends Request {

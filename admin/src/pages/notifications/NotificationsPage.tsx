@@ -11,11 +11,9 @@ import {
   RefreshCw,
   Users,
   Smartphone,
-  Mail,
   Calendar,
   Layers,
   CheckCircle2,
-  AlertCircle
 } from 'lucide-react';
 import { adminApi } from '../../api/adminApi';
 
@@ -117,7 +115,7 @@ const INITIAL_NOTIFICATIONS: NotifItem[] = [
 export const NotificationsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState('All');
   const [notifications, setNotifications] = useState<NotifItem[]>(INITIAL_NOTIFICATIONS);
-  const [loading, setLoading] = useState(false);
+  const [, setLoading] = useState(false);
 
   // Modals state
   const [selectedNotif, setSelectedNotif] = useState<NotifItem | null>(null);

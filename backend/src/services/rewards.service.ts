@@ -26,24 +26,27 @@ export class RewardsService {
   }
 
   private static async creditWalletZap(userId: string | mongoose.Types.ObjectId, amount: number) {
-    let wallet = await Wallet.findOne({ userId });
-    if (!wallet) {
-      wallet = await Wallet.create({
-        userId,
-        walletAddress: '0x' + new mongoose.Types.ObjectId().toString(),
-        balances: [{ symbol: 'ZAP', amount, lockedAmount: 0 }],
-      });
-      return wallet;
-    }
+    const cleanAmount = Math.round((Number(amount) + Number.EPSILON) * 100000000) / 100000000;
+    let credited = await Wallet.findOneAndUpdate(
+      { userId, 'balances.symbol': 'ZAP' },
+      { $inc: { 'balances.$.amount': cleanAmount } },
+      { new: true }
+    );
 
-    const zapBal = wallet.balances.find((b) => b.symbol === 'ZAP');
-    if (zapBal) {
-      zapBal.amount += amount;
-    } else {
-      wallet.balances.push({ symbol: 'ZAP', amount, lockedAmount: 0 });
+    if (!credited) {
+      credited = await Wallet.findOneAndUpdate(
+        { userId },
+        {
+          $setOnInsert: {
+            walletAddress: '0x' + new mongoose.Types.ObjectId().toString(),
+            isActive: true,
+          },
+          $push: { balances: { symbol: 'ZAP', amount: cleanAmount, lockedAmount: 0 } },
+        },
+        { new: true, upsert: true }
+      );
     }
-    await wallet.save();
-    return wallet;
+    return credited;
   }
 
   static async getOverview(userId: string) {
@@ -356,24 +359,26 @@ export class RewardsService {
 
   static async claimMission(userId: string, missionKey: string) {
     const userObjId = new mongoose.Types.ObjectId(userId);
-    const mission = await Mission.findOne({ userId: userObjId, missionKey });
+
+    // Atomic conditional check-and-claim: exactly one concurrent request can transition 'Claim' -> 'Claimed'
+    const mission = await Mission.findOneAndUpdate(
+      { userId: userObjId, missionKey, status: 'Claim' },
+      { $set: { status: 'Claimed', claimedAt: new Date() } },
+      { new: true }
+    );
+
     if (!mission) {
-      throw ApiError.notFound('Mission not found');
-    }
-
-    if (mission.status === 'Claimed') {
-      throw ApiError.badRequest('This mission reward has already been claimed.');
-    }
-
-    if (mission.status !== 'Claim') {
+      const existing = await Mission.findOne({ userId: userObjId, missionKey });
+      if (!existing) {
+        throw ApiError.notFound('Mission not found');
+      }
+      if (existing.status === 'Claimed') {
+        throw ApiError.badRequest('This mission reward has already been claimed.');
+      }
       throw ApiError.badRequest('Mission objectives not yet completed.');
     }
 
-    mission.status = 'Claimed';
-    mission.claimedAt = new Date();
-    await mission.save();
-
-    // Credit directly to user's wallet
+    // Credit directly to user's wallet atomically
     await this.creditWalletZap(userObjId, mission.rewardAmount);
 
     const rates: Record<string, number> = (await PricingService.getInrRates().catch(() => ({}))) as any;
@@ -400,25 +405,37 @@ export class RewardsService {
 
   static async openMysteryBox(userId: string) {
     const userObjId = new mongoose.Types.ObjectId(userId);
-    const streak = await RewardStreak.findOne({ userId: userObjId });
-    if (!streak || !streak.mysteryBox.isUnlocked) {
-      throw ApiError.badRequest('Mystery Box is currently locked. Complete a 7-day streak to unlock!');
-    }
-
-    if (streak.mysteryBox.isOpened) {
-      throw ApiError.badRequest('You have already opened your Mystery Box!');
-    }
 
     // Win random reward between 100 and 500
     const rewardsList = [100, 150, 200, 250, 300, 500];
     const rewardWon = rewardsList[Math.floor(Math.random() * rewardsList.length)];
 
-    streak.mysteryBox.isOpened = true;
-    streak.mysteryBox.openedAt = new Date();
-    streak.mysteryBox.rewardWon = rewardWon;
-    await streak.save();
+    // Atomic conditional open: exactly one request can open the box
+    const streak = await RewardStreak.findOneAndUpdate(
+      {
+        userId: userObjId,
+        'mysteryBox.isUnlocked': true,
+        'mysteryBox.isOpened': false,
+      },
+      {
+        $set: {
+          'mysteryBox.isOpened': true,
+          'mysteryBox.openedAt': new Date(),
+          'mysteryBox.rewardWon': rewardWon,
+        },
+      },
+      { new: true }
+    );
 
-    // Credit to wallet
+    if (!streak) {
+      const existing = await RewardStreak.findOne({ userId: userObjId });
+      if (!existing || !existing.mysteryBox.isUnlocked) {
+        throw ApiError.badRequest('Mystery Box is currently locked. Complete a 7-day streak to unlock!');
+      }
+      throw ApiError.badRequest('You have already opened your Mystery Box!');
+    }
+
+    // Credit to wallet atomically
     await this.creditWalletZap(userObjId, rewardWon);
 
     const rates: Record<string, number> = (await PricingService.getInrRates().catch(() => ({}))) as any;

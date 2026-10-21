@@ -14,6 +14,9 @@ import { ApiError } from '../utils/apiError.js';
 import { AuthService } from '../services/auth.service.js';
 import { PricingService } from '../services/pricing.service.js';
 import { ENV } from '../config/env.js';
+import { logAdminAction } from '../utils/auditLogger.js';
+import { decryptPii, maskAadhaar, maskPan } from '../utils/crypto.js';
+import { AuditLog } from '../models/auditLog.model.js';
 
 const DAY_MS = 86400000;
 const SERVER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -98,24 +101,7 @@ export class AdminController {
       const { email, password } = req.body;
       const cleanEmail = email.trim().toLowerCase();
 
-      // Check if this is the initial default admin and database has no admin yet
-      let admin = await User.findOne({ email: cleanEmail }).select('+passwordHash');
-
-      if (!admin && (cleanEmail === 'admin@zappay.com' || cleanEmail === 'admin@zappay.io' || cleanEmail === 'admin@pushride.com')) {
-        // Seed default super admin
-        const salt = await bcrypt.genSalt(10);
-        const passwordHash = await bcrypt.hash('admin123', salt);
-        admin = await User.create({
-          email: cleanEmail,
-          passwordHash,
-          fullName: 'Super Admin',
-          phone: '',
-          role: 'superadmin',
-          isEmailVerified: true,
-          isActive: true,
-          kycStatus: 'verified',
-        });
-      }
+      const admin = await User.findOne({ email: cleanEmail }).select('+passwordHash');
 
       if (!admin) {
         throw ApiError.unauthorized('Invalid admin email or password');
@@ -871,6 +857,11 @@ export class AdminController {
       tx.status = 'completed';
       await tx.save();
 
+      await logAdminAction(req, `Approved Quick Deposit: ${formatInr(amount)}`, `User:${user._id}`, {
+        resourceId: user._id.toString(),
+        details: { amount, method, note, userEmail: user.email, txReference: tx.referenceId },
+      });
+
       sendResponse({
         res,
         statusCode: 201,
@@ -928,6 +919,11 @@ export class AdminController {
           type: 'withdrawal',
           status: 'completed',
           notes: note || `Payout dispatched via ${method || 'IMPS'}`,
+        });
+
+        await logAdminAction(req, `Authorized Quick Withdrawal: ${formatInr(amount)}`, `User:${user._id}`, {
+          resourceId: user._id.toString(),
+          details: { amount, bankOrUpi, fee, method, userEmail: user.email, txReference: tx.referenceId },
         });
 
         sendResponse({
@@ -1022,10 +1018,24 @@ export class AdminController {
   ): Promise<void> {
     try {
       const kycs = await Kyc.find().populate('userId', 'email fullName role').sort({ createdAt: -1 });
+      const maskedKycs = kycs.map((k) => {
+        const obj = k.toObject();
+        if (Array.isArray(obj.documents)) {
+          obj.documents = obj.documents.map((d: any) => {
+            const raw = decryptPii(d.documentNumber);
+            return {
+              ...d,
+              documentNumber: d.docType === 'national_id' ? maskAadhaar(raw) : maskPan(raw),
+            };
+          });
+        }
+        return obj;
+      });
+
       sendResponse({
         res,
         message: 'KYC requests list',
-        data: kycs,
+        data: maskedKycs,
       });
     } catch (error) {
       next(error);
@@ -1055,6 +1065,11 @@ export class AdminController {
       await kyc.save();
 
       await User.findByIdAndUpdate(kyc.userId, { kycStatus: status });
+
+      await logAdminAction(req, `KYC Reviewed: ${status}`, `KYC:${kyc._id}`, {
+        resourceId: kyc.userId.toString(),
+        details: { status, rejectionReason },
+      });
 
       sendResponse({
         res,
@@ -1105,8 +1120,15 @@ export class AdminController {
         throw ApiError.notFound('Transaction not found');
       }
 
+      // Finite State Machine enforcement: terminal states cannot transition
+      if (tx.status === 'completed' || tx.status === 'failed' || tx.status === 'cancelled') {
+        throw ApiError.badRequest(
+          `Invalid state transition: Transaction is in terminal state '${tx.status}' and cannot be moved to '${status}'.`
+        );
+      }
+
       // If transition to completed for a deposit that was pending, credit user balance
-      if (status === 'completed' && tx.status !== 'completed' && tx.type === 'deposit') {
+      if (status === 'completed' && tx.type === 'deposit') {
         if (tx.receiverId) {
           await creditBalance(tx.receiverId as any, tx.symbol || 'INR', tx.amount);
         }
@@ -1124,12 +1146,17 @@ export class AdminController {
         tx.txHash = `IMPS-PAY-${Date.now().toString(36).toUpperCase()}`;
       }
 
+      const previousStatus = tx.status;
       tx.status = status as any;
       if (note) {
         tx.notes = tx.notes ? `${tx.notes} | ${note}` : note;
       }
       await tx.save();
 
+      await logAdminAction(req, `Updated Transaction Status to ${status}`, `Transaction:${tx.referenceId}`, {
+        resourceId: tx._id.toString(),
+        details: { previousStatus, newStatus: status, amount: tx.amount, symbol: tx.symbol },
+      });
 
       sendResponse({
         res,
@@ -2223,6 +2250,52 @@ export class AdminController {
         res,
         statusCode: 200,
         message: 'Notification deleted successfully',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getAuditLogs(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const page = parseInt(req.query.page as string, 10) || 1;
+      const limit = parseInt(req.query.limit as string, 10) || 50;
+      const skip = (page - 1) * limit;
+
+      const [logs, total] = await Promise.all([
+        AuditLog.find().sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+        AuditLog.countDocuments(),
+      ]);
+
+      const formattedLogs = logs.map((log: any) => ({
+        id: log.resourceId || `LOG-${log._id.toString().slice(-4).toUpperCase()}`,
+        adminName: log.adminName || 'Admin User',
+        adminRole: log.adminRole || 'admin',
+        action: log.action,
+        targetResource: log.targetResource,
+        ipAddress: log.ipAddress || '127.0.0.1',
+        timestamp: new Date(log.createdAt).toLocaleString('en-IN', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        status: log.status || 'Success',
+      }));
+
+      sendResponse({
+        res,
+        message: 'Audit logs retrieved successfully',
+        data: {
+          logs: formattedLogs,
+          total,
+          page,
+          totalPages: Math.ceil(total / limit),
+        },
       });
     } catch (error) {
       next(error);

@@ -2,6 +2,77 @@ import { Request, Response } from 'express';
 import { OrdersService } from '../services/orders.service.js';
 
 export class OrdersController {
+  static async executeBuy(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = (req as any).user?.userId;
+      if (!userId) {
+        res.status(401).json({ success: false, message: 'Authentication required' });
+        return;
+      }
+
+      const { assetSymbol, payAmount, currencyMode = 'INR', paymentMethod = 'wallet' } = req.body;
+      const idempotencyKey = (req.headers['idempotency-key'] || req.headers['x-idempotency-key'] || req.body.idempotencyKey) as string | undefined;
+
+      const result = await OrdersService.executeBuy(userId, {
+        assetSymbol: assetSymbol || 'ZAP',
+        payAmount: Number(payAmount),
+        currencyMode,
+        paymentMethod,
+        idempotencyKey,
+      });
+
+      const buyData = result as any;
+      res.status(201).json({
+        success: true,
+        message: buyData.alreadyProcessed
+          ? 'Buy order already processed'
+          : `Successfully executed buy order for ${buyData.tokensReceived} ${buyData.asset}`,
+        data: result,
+      });
+    } catch (err: any) {
+      res.status(err.statusCode || 500).json({
+        success: false,
+        message: err.message || 'Failed to execute buy order',
+      });
+    }
+  }
+
+  static async executeSell(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = (req as any).user?.userId;
+      if (!userId) {
+        res.status(401).json({ success: false, message: 'Authentication required' });
+        return;
+      }
+
+      const { assetSymbol, sellAmount, payoutMode = 'INR', bankAccountId, upiId } = req.body;
+      const idempotencyKey = (req.headers['idempotency-key'] || req.headers['x-idempotency-key'] || req.body.idempotencyKey) as string | undefined;
+
+      const result = await OrdersService.executeSell(userId, {
+        assetSymbol: assetSymbol || 'ZAP',
+        sellAmount: Number(sellAmount),
+        payoutMode,
+        bankAccountId,
+        upiId,
+        idempotencyKey,
+      });
+
+      const sellData = result as any;
+      res.status(201).json({
+        success: true,
+        message: sellData.alreadyProcessed
+          ? 'Sell order already processed'
+          : `Successfully executed sell order for ${sellData.soldTokens} ${assetSymbol || 'xCoin'}`,
+        data: result,
+      });
+    } catch (err: any) {
+      res.status(err.statusCode || 500).json({
+        success: false,
+        message: err.message || 'Failed to execute sell order',
+      });
+    }
+  }
+
   static async getOrders(req: Request, res: Response): Promise<void> {
     try {
       const userId = (req as any).user?.userId;

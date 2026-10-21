@@ -3,6 +3,7 @@ import { TransactionType, TransactionStatus } from '../types/index.js';
 
 export interface ITransaction extends Document {
   referenceId: string;
+  idempotencyKey?: string;
   senderId?: mongoose.Types.ObjectId;
   receiverId?: mongoose.Types.ObjectId;
   senderAddress?: string;
@@ -18,12 +19,24 @@ export interface ITransaction extends Document {
   updatedAt: Date;
 }
 
+const ALLOWED_TRANSITIONS: Record<TransactionStatus, TransactionStatus[]> = {
+  pending: ['completed', 'failed', 'cancelled'],
+  completed: [], // Terminal
+  failed: [],    // Terminal
+  cancelled: [], // Terminal
+};
+
 const transactionSchema = new Schema<ITransaction>(
   {
     referenceId: {
       type: String,
       required: true,
       unique: true,
+      index: true,
+    },
+    idempotencyKey: {
+      type: String,
+      sparse: true,
       index: true,
     },
     senderId: {
@@ -55,11 +68,13 @@ const transactionSchema = new Schema<ITransaction>(
       type: Number,
       required: true,
       min: 0,
+      set: (val: number) => Math.round((val + Number.EPSILON) * 100000000) / 100000000, // Clamp to 8 decimal precision
     },
     fee: {
       type: Number,
       default: 0,
       min: 0,
+      set: (val: number) => Math.round((val + Number.EPSILON) * 100000000) / 100000000,
     },
     type: {
       type: String,
@@ -87,4 +102,32 @@ const transactionSchema = new Schema<ITransaction>(
   }
 );
 
+// Finite State Machine pre-save enforcement
+transactionSchema.pre('save', function (next) {
+  if (!this.isNew && this.isModified('status')) {
+    const originalStatus = (this as any)._originalStatus || (this.isModified('status') ? this.get('status') : undefined);
+    // When status changes on an existing document, validate against state machine
+    const prevStatus = (this as any)._previousStatus;
+    if (prevStatus && prevStatus !== this.status) {
+      const allowed = ALLOWED_TRANSITIONS[prevStatus as TransactionStatus] || [];
+      if (!allowed.includes(this.status)) {
+        return next(
+          new Error(`Invalid state transition: Cannot change status from '${prevStatus}' to '${this.status}'.`)
+        );
+      }
+    }
+  }
+  next();
+});
+
+// Cache previous status for state transition enforcement
+transactionSchema.post('init', function () {
+  (this as any)._previousStatus = this.status;
+});
+
+transactionSchema.post('save', function () {
+  (this as any)._previousStatus = this.status;
+});
+
 export const Transaction = mongoose.model<ITransaction>('Transaction', transactionSchema);
+export { ALLOWED_TRANSITIONS };

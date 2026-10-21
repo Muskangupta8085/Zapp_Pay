@@ -188,8 +188,21 @@ export const WalletService = {
     return res.data?.data;
   },
 
-  async send(data: { receiverAddress: string; symbol: string; amount: number; notes?: string }) {
+  async send(data: { receiverAddress: string; symbol: string; amount: number; notes?: string; pin?: string }) {
     const res = await apiClient.post('/wallet/send', data);
+    return res.data;
+  },
+
+  async withdraw(data: {
+    symbol?: string;
+    amount: number;
+    destinationType?: 'BANK' | 'UPI' | 'CRYPTO';
+    bankAccountId?: string;
+    upiId?: string;
+    cryptoAddress?: string;
+    pin: string;
+  }) {
+    const res = await apiClient.post('/wallet/withdraw', data);
     return res.data;
   },
 
@@ -213,6 +226,16 @@ export const WalletService = {
   async cancelRequest(id: string) {
     const res = await apiClient.delete(`/wallet/requests/${id}`);
     return res.data;
+  },
+
+  async payRequest(id: string, pin: string) {
+    const res = await apiClient.post(`/wallet/requests/${id}/pay`, { pin });
+    return res.data;
+  },
+
+  async getTransactions(params?: { page?: number; limit?: number; type?: string; status?: string }) {
+    const res = await apiClient.get('/wallet/transactions', { params });
+    return res.data?.data;
   },
 };
 

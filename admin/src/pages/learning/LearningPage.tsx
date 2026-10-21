@@ -12,7 +12,6 @@ import {
   Download,
   LayoutGrid,
   List,
-  Sparkles,
   ChevronDown,
   X,
   Play,

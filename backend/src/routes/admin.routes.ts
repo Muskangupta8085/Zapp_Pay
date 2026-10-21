@@ -18,7 +18,7 @@ const router = Router();
 router.post('/auth/login', validate(adminLoginSchema), AdminController.login);
 
 // ==========================================
-// 2. PROTECTED ADMIN ROUTES
+// 2. PROTECTED ADMIN BASE (admin, superadmin, moderator)
 // ==========================================
 router.use(authenticate, authorizeRoles('admin', 'superadmin', 'moderator'));
 
@@ -26,18 +26,11 @@ router.use(authenticate, authorizeRoles('admin', 'superadmin', 'moderator'));
 router.get('/auth/me', AdminController.me);
 router.patch('/profile', AdminController.updateProfile);
 
-// Dashboard Metrics & Charts
+// Dashboard Metrics & Charts (Read-only for all staff)
 router.get('/dashboard/stats', AdminController.getDashboardStats);
 router.get('/dashboard/charts', AdminController.getDashboardCharts);
 router.get('/dashboard/activities', AdminController.getRecentActivities);
 router.get('/dashboard/recent-transactions', AdminController.getRecentTransactions);
-
-// Dashboard Quick Actions
-router.post('/dashboard/quick-user', validate(quickUserSchema), AdminController.quickCreateUser);
-router.post('/dashboard/quick-deposit', validate(quickDepositSchema), AdminController.quickApproveDeposit);
-router.post('/dashboard/quick-withdrawal', validate(quickWithdrawalSchema), AdminController.quickAuthorizeWithdrawal);
-
-// Legacy/Compatibility Overview
 router.get('/overview', AdminController.getDashboardStats);
 
 // User & KYC Operations
@@ -45,37 +38,90 @@ router.get('/users', AdminController.listUsers);
 router.get('/kyc', AdminController.listKycRequests);
 router.patch('/kyc/:id/review', AdminController.reviewKyc);
 
-// Transactions & Orders
+// Transactions & Orders (Read-only)
 router.get('/transactions', AdminController.listAllTransactions);
-router.patch('/transactions/:id/status', AdminController.updateTransactionStatus);
 router.get('/orders', AdminController.listOrders);
-
-
-// Treasury Vaults & Reserves
 router.get('/treasury/vaults', AdminController.getTreasuryVaults);
-
-// xCoin Market & Engine
-router.get('/market/xcoin', AdminController.getXCoinMarketData);
-router.patch('/market/xcoin', AdminController.updateXCoinSettings);
-
-// Team & Referrals
 router.get('/team/referrals', AdminController.getTeamReferralsData);
-router.post('/team/referrals/bonus', AdminController.creditReferralReward);
-
-// Rewards & Engagement Hub
 router.get('/rewards', AdminController.getRewardsOverview);
-router.put('/rewards/streak', AdminController.updateStreakConfig);
-router.post('/rewards/tasks', AdminController.addBountyTask);
-router.patch('/rewards/tasks/:id/toggle', AdminController.toggleBountyTask);
-router.delete('/rewards/tasks/:id', AdminController.deleteBountyTask);
-router.post('/rewards/airdrop', AdminController.airdropReward);
-
-// Notifications & Broadcasts
+router.get('/market/xcoin', AdminController.getXCoinMarketData);
 router.get('/notifications', AdminController.listNotifications);
-router.post('/notifications', AdminController.sendNotification);
-router.delete('/notifications/:id', AdminController.deleteNotification);
+router.get('/audit-logs', AdminController.getAuditLogs);
+
+// ==========================================
+// 3. FINANCIAL MUTATIONS & PRIVILEGED ACTIONS (admin, superadmin ONLY)
+// ==========================================
+router.post(
+  '/dashboard/quick-user',
+  authorizeRoles('admin', 'superadmin'),
+  validate(quickUserSchema),
+  AdminController.quickCreateUser
+);
+router.post(
+  '/dashboard/quick-deposit',
+  authorizeRoles('admin', 'superadmin'),
+  validate(quickDepositSchema),
+  AdminController.quickApproveDeposit
+);
+router.post(
+  '/dashboard/quick-withdrawal',
+  authorizeRoles('admin', 'superadmin'),
+  validate(quickWithdrawalSchema),
+  AdminController.quickAuthorizeWithdrawal
+);
+router.patch(
+  '/transactions/:id/status',
+  authorizeRoles('admin', 'superadmin'),
+  AdminController.updateTransactionStatus
+);
+router.post(
+  '/team/referrals/bonus',
+  authorizeRoles('admin', 'superadmin'),
+  AdminController.creditReferralReward
+);
+router.post(
+  '/rewards/tasks',
+  authorizeRoles('admin', 'superadmin'),
+  AdminController.addBountyTask
+);
+router.patch(
+  '/rewards/tasks/:id/toggle',
+  authorizeRoles('admin', 'superadmin'),
+  AdminController.toggleBountyTask
+);
+router.delete(
+  '/rewards/tasks/:id',
+  authorizeRoles('admin', 'superadmin'),
+  AdminController.deleteBountyTask
+);
+router.post(
+  '/notifications',
+  authorizeRoles('admin', 'superadmin'),
+  AdminController.sendNotification
+);
+router.delete(
+  '/notifications/:id',
+  authorizeRoles('admin', 'superadmin'),
+  AdminController.deleteNotification
+);
+
+// ==========================================
+// 4. CRITICAL SYSTEM SETTINGS (superadmin ONLY)
+// ==========================================
+router.patch(
+  '/market/xcoin',
+  authorizeRoles('superadmin'),
+  AdminController.updateXCoinSettings
+);
+router.put(
+  '/rewards/streak',
+  authorizeRoles('superadmin'),
+  AdminController.updateStreakConfig
+);
+router.post(
+  '/rewards/airdrop',
+  authorizeRoles('superadmin'),
+  AdminController.airdropReward
+);
 
 export default router;
-
-
-

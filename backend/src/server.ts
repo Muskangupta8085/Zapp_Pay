@@ -4,12 +4,16 @@ import { ENV } from './config/env.js';
 import { logger } from './utils/logger.js';
 
 import { seedDatabaseIfEmpty } from './utils/seeder.js';
+import { ReconciliationService } from './services/reconciliation.service.js';
 
 const startServer = async () => {
   try {
     // Attempt database connection
     await connectDB();
     await seedDatabaseIfEmpty();
+
+    // Start background financial reconciliation worker
+    ReconciliationService.startReconciliationWorker();
 
     const server = app.listen(ENV.PORT, '0.0.0.0', () => {
       logger.info(`🚀 Zapp Pay Backend running on port ${ENV.PORT} [${ENV.NODE_ENV}]`);

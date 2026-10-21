@@ -34,6 +34,10 @@ export interface IUser extends Document {
   bankAccount?: IBankAccount;
   biometricEnabled: boolean;
   notificationPreferences: INotificationPreferences;
+  tokenVersion: number;
+  pinAttemptCount: number;
+  pinLockedUntil?: Date | null;
+  payoutCoolingOffUntil?: Date | null;
   comparePassword(password: string): Promise<boolean>;
   createdAt: Date;
   updatedAt: Date;
@@ -128,6 +132,22 @@ const userSchema = new Schema<IUser>(
       trades: { type: Boolean, default: true },
       deposits: { type: Boolean, default: true },
       marketing: { type: Boolean, default: true },
+    },
+    tokenVersion: {
+      type: Number,
+      default: 1,
+    },
+    pinAttemptCount: {
+      type: Number,
+      default: 0,
+    },
+    pinLockedUntil: {
+      type: Date,
+      default: null,
+    },
+    payoutCoolingOffUntil: {
+      type: Date,
+      default: null,
     },
   },
   {

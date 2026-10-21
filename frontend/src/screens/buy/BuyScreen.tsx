@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { HomeService } from '../../services/api.service';
+import { apiClient } from '../../api/client';
 
 interface BuyScreenProps {
   onBack?: () => void;
@@ -152,7 +153,7 @@ export const BuyScreen: React.FC<BuyScreenProps> = ({
           { label: '500₮', val: '500' },
         ];
 
-  const handleBuySubmit = () => {
+  const handleBuySubmit = async () => {
     const minAmount = currencyMode === 'INR' ? 100 : 5;
     const currencyLabel = currencyMode === 'INR' ? '₹' : 'USDT';
 
@@ -175,21 +176,36 @@ export const BuyScreen: React.FC<BuyScreenProps> = ({
         ? 'Spot USDT Vault'
         : 'TRC-20 Network';
 
-    Alert.alert(
-      'Order Executed! 🎉',
-      `Purchased ${estimatedTokens} ${currentAsset.symbol} for ${
-        currencyMode === 'INR' ? '₹ ' : ''
-      }${parsedPayAmount.toLocaleString('en-IN')} ${
-        currencyMode === 'USDT' ? 'USDT' : ''
-      } via ${paymentLabel}.\n\nTokens are credited to your vault.`,
-      [
-        {
-          text: 'View Orders',
-          onPress: () => onNavigateToOrders && onNavigateToOrders(),
-        },
-        { text: 'Done', style: 'cancel' },
-      ]
-    );
+    try {
+      const paymentMethod = currencyMode === 'INR' ? inrPaymentMethod : usdtPaymentMethod;
+      const res = await apiClient.post('/orders/buy', {
+        assetSymbol: currentAsset.symbol === 'xCoin' ? 'ZAP' : currentAsset.symbol,
+        payAmount: parsedPayAmount,
+        currencyMode,
+        paymentMethod,
+      });
+
+      if (res.data?.success) {
+        await refreshWallet();
+        Alert.alert(
+          'Order Executed! 🎉',
+          `Purchased ${res.data.data?.tokensReceived || estimatedTokens} ${currentAsset.symbol} for ${
+            currencyMode === 'INR' ? '₹ ' : ''
+          }${parsedPayAmount.toLocaleString('en-IN')} ${
+            currencyMode === 'USDT' ? 'USDT' : ''
+          } via ${paymentLabel}.\n\nTokens are credited to your vault.`,
+          [
+            {
+              text: 'View Orders',
+              onPress: () => onNavigateToOrders && onNavigateToOrders(),
+            },
+            { text: 'Done', style: 'cancel' },
+          ]
+        );
+      }
+    } catch (err: any) {
+      Alert.alert('Order Failed', err.message || 'Failed to execute buy order.');
+    }
   };
 
   return (

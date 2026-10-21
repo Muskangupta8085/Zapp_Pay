@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { secureStorage } from '../services/secureStorage';
 import Constants from 'expo-constants';
 
 export const AUTH_TOKEN_KEY = '@zapp_auth_token';
@@ -13,6 +14,10 @@ export const USER_KEY = '@zapp_auth_user';
 // 3. Environment variable EXPO_PUBLIC_API_URL if set
 // 4. Default fallback: 192.168.1.22:5000 (Current PC LAN IP)
 export const getDefaultBaseUrl = (): string => {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
+
   if (Platform.OS === 'web') {
     return 'http://localhost:5000/api/v1';
   }
@@ -30,10 +35,6 @@ export const getDefaultBaseUrl = (): string => {
     }
   }
 
-  if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL;
-  }
-
   return 'http://192.168.1.22:5000/api/v1';
 };
 
@@ -48,11 +49,11 @@ export const apiClient = axios.create({
   },
 });
 
-// Automatically attach Bearer token if present
+// Automatically attach Bearer token from secure storage
 apiClient.interceptors.request.use(
   async (config) => {
     try {
-      const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+      const token = await secureStorage.getItem(AUTH_TOKEN_KEY);
       if (token && config.headers) {
         config.headers.Authorization = `Bearer ${token}`;
       }
@@ -83,7 +84,9 @@ apiClient.interceptors.response.use(
 
     if (error.response?.status === 401) {
       try {
-        await AsyncStorage.multiRemove([AUTH_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY]);
+        await secureStorage.removeItem(AUTH_TOKEN_KEY);
+        await secureStorage.removeItem(REFRESH_TOKEN_KEY);
+        await AsyncStorage.removeItem(USER_KEY);
       } catch {
         // Ignore removal error
       }

@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { HomeService } from '../../services/api.service';
+import { apiClient } from '../../api/client';
 
 interface SellScreenProps {
   onBack?: () => void;
@@ -137,7 +138,7 @@ export const SellScreen: React.FC<SellScreenProps> = ({
     setSellAmount(calculated);
   };
 
-  const handleSellSubmit = () => {
+  const handleSellSubmit = async () => {
     if (numSellAmount <= 0) {
       Alert.alert('Invalid Quantity', 'Please enter a valid amount to sell.');
       return;
@@ -153,36 +154,49 @@ export const SellScreen: React.FC<SellScreenProps> = ({
     const bankDisplayName = user?.bankAccount?.bankName || 'Primary Bank Account';
     const bankDisplayAcc = user?.bankAccount?.accountNumber ? `•••• ${user.bankAccount.accountNumber.slice(-4)}` : '•••• 4892';
 
-    if (payoutMode === 'INR') {
-      Alert.alert(
-        'Sell Order Executed! 🚀',
-        `Sold ${numSellAmount} ${currentAsset.symbol}.\n\nNet payout of ₹ ${netPayout.toLocaleString(
-          'en-IN',
-          { maximumFractionDigits: 2 }
-        )} has been dispatched via IMPS to your ${bankDisplayName} (${bankDisplayAcc}).\n\n1% TDS certificate will be generated automatically.`,
-        [
-          {
-            text: 'View Orders',
-            onPress: () => onNavigateToOrders && onNavigateToOrders(),
-          },
-          { text: 'Done', style: 'cancel' },
-        ]
-      );
-    } else {
-      Alert.alert(
-        'Swap to USDT Completed! 💎',
-        `Swapped ${numSellAmount} ${currentAsset.symbol} for ${netPayout.toLocaleString(
-          'en-US',
-          { minimumFractionDigits: 2, maximumFractionDigits: 2 }
-        )} USDT.\n\nFunds credited directly to your Spot USDT Vault with 0 TDS.`,
-        [
-          {
-            text: 'View Orders',
-            onPress: () => onNavigateToOrders && onNavigateToOrders(),
-          },
-          { text: 'Done', style: 'cancel' },
-        ]
-      );
+    try {
+      const res = await apiClient.post('/orders/sell', {
+        assetSymbol: currentAsset.symbol === 'xCoin' ? 'ZAP' : currentAsset.symbol,
+        sellAmount: numSellAmount,
+        payoutMode,
+      });
+
+      if (res.data?.success) {
+        await refreshWallet();
+        if (payoutMode === 'INR') {
+          Alert.alert(
+            'Sell Order Executed! 🚀',
+            `Sold ${numSellAmount} ${currentAsset.symbol}.\n\nNet payout of ₹ ${res.data.data?.netPayout || netPayout.toLocaleString(
+              'en-IN',
+              { maximumFractionDigits: 2 }
+            )} has been dispatched via IMPS to your ${bankDisplayName} (${bankDisplayAcc}).\n\n1% TDS certificate will be generated automatically.`,
+            [
+              {
+                text: 'View Orders',
+                onPress: () => onNavigateToOrders && onNavigateToOrders(),
+              },
+              { text: 'Done', style: 'cancel' },
+            ]
+          );
+        } else {
+          Alert.alert(
+            'Swap to USDT Completed! 💎',
+            `Swapped ${numSellAmount} ${currentAsset.symbol} for ${res.data.data?.netPayout || netPayout.toLocaleString(
+              'en-US',
+              { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+            )} USDT.\n\nFunds credited directly to your Spot USDT Vault with 0 TDS.`,
+            [
+              {
+                text: 'View Orders',
+                onPress: () => onNavigateToOrders && onNavigateToOrders(),
+              },
+              { text: 'Done', style: 'cancel' },
+            ]
+          );
+        }
+      }
+    } catch (err: any) {
+      Alert.alert('Sell Failed', err.message || 'Failed to execute sell order.');
     }
   };
 

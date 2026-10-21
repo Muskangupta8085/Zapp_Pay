@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { secureStorage } from '../services/secureStorage';
 import { AuthService, UserProfile, RegisterPayload, LoginPayload } from '../services/auth.service';
 import { AUTH_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY } from '../api/client';
 
@@ -60,7 +61,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const restoreSession = async () => {
       try {
-        const storedToken = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+        const storedToken = await secureStorage.getItem(AUTH_TOKEN_KEY);
         const storedUser = await AsyncStorage.getItem(USER_KEY);
 
         if (storedToken && storedUser) {
@@ -141,10 +142,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const { user: verifiedUser, token: authToken, refreshToken } = res.data;
 
-    // Persist to storage
-    await AsyncStorage.setItem(AUTH_TOKEN_KEY, authToken);
+    // Persist to secure hardware storage
+    await secureStorage.setItem(AUTH_TOKEN_KEY, authToken);
     if (refreshToken) {
-      await AsyncStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+      await secureStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
     }
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(verifiedUser));
 
@@ -169,12 +170,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logout = async () => {
     try {
-      const storedRefreshToken = await AsyncStorage.getItem(REFRESH_TOKEN_KEY);
+      const storedRefreshToken = await secureStorage.getItem(REFRESH_TOKEN_KEY);
       await AuthService.logout(storedRefreshToken || undefined);
     } catch {
       // Proceed with local logout regardless of network error
     } finally {
-      await AsyncStorage.multiRemove([AUTH_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY]);
+      await secureStorage.removeItem(AUTH_TOKEN_KEY);
+      await secureStorage.removeItem(REFRESH_TOKEN_KEY);
+      await AsyncStorage.removeItem(USER_KEY);
       setToken(null);
       setUser(null);
       setWallet(null);

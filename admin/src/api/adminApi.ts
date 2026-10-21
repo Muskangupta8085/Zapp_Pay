@@ -241,4 +241,9 @@ export const adminApi = {
       body: JSON.stringify(payload),
     });
   },
+
+  // Audit Logs
+  async getAuditLogs(page = 1, limit = 50) {
+    return apiRequest<{ logs: any[]; total: number; page: number }>(`/admin/audit-logs?page=${page}&limit=${limit}`);
+  },
 };

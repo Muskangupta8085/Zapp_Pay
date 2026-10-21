@@ -96,7 +96,8 @@ export class ProfileController {
         isVerified: true,
       });
 
-      // Also sync to User profile for fast reference
+      // Also sync to User profile for fast reference and set 24h cooling-off on payouts
+      const coolingOffUntil = new Date(Date.now() + 24 * 60 * 60 * 1000);
       if (type === 'BANK') {
         await User.findByIdAndUpdate(userId, {
           bankAccount: {
@@ -106,17 +107,20 @@ export class ProfileController {
             accountHolderName: accountHolderName?.trim(),
             isVerified: true,
           },
+          payoutCoolingOffUntil: coolingOffUntil,
         });
       } else if (type === 'UPI') {
         await User.findByIdAndUpdate(userId, {
           upiId: upiId.trim().toLowerCase(),
+          payoutCoolingOffUntil: coolingOffUntil,
         });
       }
 
       res.status(201).json({
         success: true,
-        message: 'Account linked successfully.',
+        message: 'Account linked successfully. Note: For security, a 24-hour cooling-off period applies to new payout destinations before withdrawals.',
         data: newAccount,
+        coolingOffUntil,
       });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Failed to link account' });
@@ -258,20 +262,73 @@ export class ProfileController {
       const userId = (req as any).user?.userId;
       const { pin } = req.body;
 
+      if (!pin || typeof pin !== 'string' || !/^\d{6}$/.test(pin.trim())) {
+        res.status(400).json({ success: false, verified: false, message: 'A valid 6-digit transaction PIN is required.' });
+        return;
+      }
+
       const user = await User.findById(userId).select('+transactionPinHash');
-      if (!user || !user.transactionPinHash) {
-        // If PIN is not yet set, accept or prompt
-        res.status(200).json({ success: true, verified: true, hasPin: false });
+      if (!user) {
+        res.status(404).json({ success: false, message: 'User not found' });
         return;
       }
 
-      const matches = await bcrypt.compare(pin, user.transactionPinHash);
+      // Check if account is temporarily locked due to repeated PIN failures
+      if (user.pinLockedUntil && user.pinLockedUntil > new Date()) {
+        const remainingSeconds = Math.ceil((user.pinLockedUntil.getTime() - Date.now()) / 1000);
+        res.status(429).json({
+          success: false,
+          verified: false,
+          locked: true,
+          message: `Too many incorrect attempts. PIN verification is locked for ${remainingSeconds} seconds.`,
+        });
+        return;
+      }
+
+      // If user has not configured a PIN yet, never bypass
+      if (!user.transactionPinHash) {
+        res.status(400).json({
+          success: false,
+          verified: false,
+          hasPin: false,
+          message: 'Transaction PIN has not been set. Please set up your 6-digit PIN before proceeding.',
+        });
+        return;
+      }
+
+      const matches = await bcrypt.compare(pin.trim(), user.transactionPinHash);
       if (!matches) {
-        res.status(400).json({ success: false, verified: false, message: 'Incorrect transaction PIN' });
+        user.pinAttemptCount = (user.pinAttemptCount || 0) + 1;
+        if (user.pinAttemptCount >= 3) {
+          user.pinLockedUntil = new Date(Date.now() + 15 * 60 * 1000); // 15-minute lockout
+          user.pinAttemptCount = 0;
+          await user.save();
+          res.status(429).json({
+            success: false,
+            verified: false,
+            locked: true,
+            message: 'Maximum incorrect PIN attempts reached. Transaction operations locked for 15 minutes.',
+          });
+          return;
+        }
+
+        await user.save();
+        const attemptsRemaining = 3 - user.pinAttemptCount;
+        res.status(400).json({
+          success: false,
+          verified: false,
+          attemptsRemaining,
+          message: `Incorrect transaction PIN. ${attemptsRemaining} attempt(s) remaining before lockout.`,
+        });
         return;
       }
 
-      res.status(200).json({ success: true, verified: true, hasPin: true });
+      // Reset lockout counter on success
+      user.pinAttemptCount = 0;
+      user.pinLockedUntil = null;
+      await user.save();
+
+      res.status(200).json({ success: true, verified: true, hasPin: true, message: 'PIN verified successfully' });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Verification failed' });
     }

@@ -5,6 +5,16 @@ import { ENV } from '../config/env.js';
 
 export class OtpService {
   /**
+   * Hashes an OTP code using SHA-256 for secure database storage
+   */
+  private static hashOtp(otpCode: string, identifier: string): string {
+    return crypto
+      .createHash('sha256')
+      .update(`${identifier}:${otpCode.trim()}`)
+      .digest('hex');
+  }
+
+  /**
    * Normalizes an identifier (phone or email)
    */
   static normalizeIdentifier(raw: string): { normalized: string; type: 'mobile' | 'email' } {
@@ -35,17 +45,17 @@ export class OtpService {
   }
 
   /**
-   * Generates a 6-digit numeric OTP code
+   * Generates a cryptographically secure 6-digit numeric OTP code
    */
   static generateOtpCode(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    return crypto.randomInt(100000, 1000000).toString();
   }
 
   /**
    * Dispatches OTP via console (dev) or configured SMS/Email provider
    */
   static async dispatchOtp(identifier: string, otpCode: string, purpose: OtpPurpose): Promise<void> {
-    const banner = `\n=========================================================\n🔔 [ZAPP PAY OTP] [${purpose.toUpperCase()}]\nTarget: ${identifier}\nCode:   >>> ${otpCode} <<<\nExpires in 5 minutes\n=========================================================\n`;
+    const banner = `\n=========================================================\n🔔 [ZAPP PAY OTP] [${purpose.toUpperCase()}]\nTarget: ${identifier}\nCode:   >>> ${otpCode} <<<\nExpires in 3 minutes\n=========================================================\n`;
     console.log(banner);
 
     // In production, integrate SMS provider (e.g., Twilio, Fast2SMS) or SMTP
@@ -55,7 +65,7 @@ export class OtpService {
   }
 
   /**
-   * Creates or updates an OTP record with cooldown and 5-min TTL
+   * Creates or updates an OTP record with cooldown and 3-min TTL with hashed DB storage
    */
   static async requestOtp(
     rawIdentifier: string,
@@ -73,16 +83,18 @@ export class OtpService {
       throw ApiError.badRequest(`Please wait ${waitSeconds} seconds before requesting a new verification code.`);
     }
 
-    const otpCode = this.generateOtpCode();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-    const resendAfter = new Date(Date.now() + 45 * 1000); // 45 seconds cooldown
+    const rawOtpCode = this.generateOtpCode();
+    const hashedOtp = this.hashOtp(rawOtpCode, normalized);
+
+    const expiresAt = new Date(Date.now() + 3 * 60 * 1000); // 3 minutes
+    const resendAfter = new Date(Date.now() + 60 * 1000); // 60 seconds cooldown
 
     // Clear previous pending OTPs for this identifier & purpose
     await Otp.deleteMany({ identifier: normalized, purpose });
 
     await Otp.create({
       identifier: normalized,
-      otpCode,
+      otpCode: hashedOtp,
       purpose,
       attempts: 0,
       expiresAt,
@@ -91,18 +103,18 @@ export class OtpService {
       tempUserData,
     });
 
-    await this.dispatchOtp(normalized, otpCode, purpose);
+    await this.dispatchOtp(normalized, rawOtpCode, purpose);
 
     return {
       contactInfo: normalized,
-      expiresInSeconds: 300,
-      resendAvailableInSeconds: 45,
-      devOtp: ENV.NODE_ENV === 'development' ? otpCode : undefined,
+      expiresInSeconds: 180,
+      resendAvailableInSeconds: 60,
+      devOtp: ENV.NODE_ENV === 'development' ? rawOtpCode : undefined,
     };
   }
 
   /**
-   * Verifies an entered OTP code
+   * Verifies an entered OTP code against the hashed database entry
    */
   static async verifyOtp(
     rawIdentifier: string,
@@ -126,18 +138,23 @@ export class OtpService {
       throw ApiError.badRequest('Verification code has expired. Please request a new code.');
     }
 
-    if (otpRecord.attempts >= 5) {
+    if (otpRecord.attempts >= 3) {
       await Otp.deleteOne({ _id: otpRecord._id });
       throw ApiError.badRequest('Maximum attempts exceeded. Verification code invalidated. Please request a new code.');
     }
 
-    const isDevMasterCode = ENV.NODE_ENV === 'development' && (enteredOtp.trim() === '123456' || enteredOtp.trim() === '000000');
+    const hashedEntered = this.hashOtp(enteredOtp, normalized);
+    const isValid = crypto.timingSafeEqual(Buffer.from(hashedEntered), Buffer.from(otpRecord.otpCode));
 
-    if (!isDevMasterCode && otpRecord.otpCode !== enteredOtp.trim()) {
+    if (!isValid) {
       otpRecord.attempts += 1;
+      if (otpRecord.attempts >= 3) {
+        await Otp.deleteOne({ _id: otpRecord._id });
+        throw ApiError.badRequest('Maximum attempts exceeded. Verification code invalidated. Please request a new code.');
+      }
       await otpRecord.save();
-      const remaining = 5 - otpRecord.attempts;
-      throw ApiError.badRequest(`Invalid verification code. ${remaining} attempts remaining.`);
+      const remaining = 3 - otpRecord.attempts;
+      throw ApiError.badRequest(`Invalid verification code. ${remaining} attempt(s) remaining.`);
     }
 
     // Success: mark as verified and clean up
@@ -146,7 +163,7 @@ export class OtpService {
 
     const tempUserData = otpRecord.tempUserData;
 
-    // Delete verified OTP
+    // Delete verified OTP to prevent reuse
     await Otp.deleteOne({ _id: otpRecord._id });
 
     return {

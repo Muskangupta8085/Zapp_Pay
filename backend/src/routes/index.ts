@@ -12,6 +12,7 @@ import ordersRoutes from './orders.routes.js';
 import rewardsRoutes from './rewards.routes.js';
 import teamRoutes from './team.routes.js';
 import appRoutes from './app.routes.js';
+import webhookRoutes from './webhook.routes.js';
 
 const router = Router();
 
@@ -33,6 +34,7 @@ router.use('/transactions', transactionRoutes);
 router.use('/kyc', kycRoutes);
 router.use('/market', marketRoutes);
 router.use('/admin', adminRoutes);
+router.use('/webhooks', webhookRoutes);
 
 // New Screen Endpoints
 router.use('/home', homeRoutes);

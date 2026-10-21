@@ -14,6 +14,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
+import { apiClient } from '../../api/client';
 
 interface UpiScreenProps {
   onBack?: () => void;
@@ -36,24 +37,34 @@ export const UpiScreen: React.FC<UpiScreenProps> = ({
     setTimeout(() => setCopiedVpa(false), 2000);
   };
 
-  const handleVerifyUtr = () => {
+  const handleVerifyUtr = async () => {
     if (utrNumber.trim().length < 10) {
       Alert.alert('Invalid UTR', 'Please enter a valid 12-digit UPI reference / UTR number.');
       return;
     }
 
-    Alert.alert(
-      'Payment Verified! ✅',
-      `UTR ${utrNumber} successfully matched. ₹ ${customAmount} has been credited to your Zapp Pay wallet balance.`,
-      [
-        {
-          text: 'View Orders',
-          onPress: () => onNavigateToOrders && onNavigateToOrders(),
-        },
-        { text: 'Done', style: 'cancel' },
-      ]
-    );
-    setUtrNumber('');
+    try {
+      await apiClient.post('/wallet/request', {
+        amount: Number(customAmount),
+        requestType: 'coin_request',
+        note: `UPI Deposit UTR: ${utrNumber.trim()}`,
+      });
+
+      Alert.alert(
+        'Deposit Submitted for Verification ⏳',
+        `UTR ${utrNumber.trim()} has been registered with our settlement pipeline. Funds will be credited automatically once bank confirmation completes.`,
+        [
+          {
+            text: 'View Orders',
+            onPress: () => onNavigateToOrders && onNavigateToOrders(),
+          },
+          { text: 'Done', style: 'cancel' },
+        ]
+      );
+      setUtrNumber('');
+    } catch (err: any) {
+      Alert.alert('Submission Failed', err.message || 'Failed to submit deposit for verification.');
+    }
   };
 
   const handleOpenUpiApp = (appName: string) => {

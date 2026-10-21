@@ -1,9 +1,18 @@
 import mongoose from 'mongoose';
 import { ENV } from './env.js';
 
+let cachedPromise: Promise<typeof mongoose> | null = null;
+
 export const connectDB = async (): Promise<void> => {
+  if (mongoose.connection.readyState === 1) {
+    return;
+  }
+
   try {
-    const conn = await mongoose.connect(ENV.MONGODB_URI);
+    if (!cachedPromise) {
+      cachedPromise = mongoose.connect(ENV.MONGODB_URI);
+    }
+    const conn = await cachedPromise;
     console.log(`[MongoDB] Connected successfully: ${conn.connection.host}`);
 
     // Ensure sparse unique index on users.email so phone-only registrations never conflict
@@ -22,7 +31,8 @@ export const connectDB = async (): Promise<void> => {
       // Index sync already satisfied
     }
   } catch (error) {
+    cachedPromise = null;
     console.error('[MongoDB] Connection error:', error);
-    process.exit(1);
+    throw error;
   }
 };

@@ -14,15 +14,16 @@ export class AuthService {
   /**
    * Generates a signed JWT Access Token
    */
-  static generateAccessToken(user: { _id: any; email?: string; phone?: string; role: any }): string {
+  static generateAccessToken(user: { _id: any; email?: string; phone?: string; role: any; tokenVersion?: number }): string {
     const payload: TokenPayload = {
       userId: user._id.toString(),
       email: user.email,
       phone: user.phone,
       role: user.role,
+      tokenVersion: user.tokenVersion ?? 1,
     };
     return jwt.sign(payload, ENV.JWT_SECRET, {
-      expiresIn: (ENV.JWT_EXPIRES_IN || '7d') as any,
+      expiresIn: (ENV.JWT_EXPIRES_IN || '15m') as any,
     });
   }
 
@@ -377,6 +378,7 @@ export class AuthService {
 
     const salt = await bcrypt.genSalt(10);
     user.passwordHash = await bcrypt.hash(newPassword, salt);
+    user.tokenVersion = (user.tokenVersion || 1) + 1;
     await user.save();
 
     // Revoke all active refresh tokens for security
@@ -388,13 +390,25 @@ export class AuthService {
   }
 
   /**
-   * Rotates refresh token and issues a new access token
+   * Rotates refresh token with reuse detection and issues a new access token
    */
   static async refreshToken(oldToken: string): Promise<{ token: string; refreshToken: string }> {
-    const record = await RefreshToken.findOne({ token: oldToken, isRevoked: false });
+    const record = await RefreshToken.findOne({ token: oldToken });
 
-    if (!record || record.expiresAt < new Date()) {
-      throw ApiError.unauthorized('Invalid or expired refresh token. Please log in again.');
+    if (!record) {
+      throw ApiError.unauthorized('Invalid refresh token. Please log in again.');
+    }
+
+    if (record.isRevoked) {
+      // REUSE DETECTED: This is a compromised token replay attack!
+      // Invalidate all sessions for this user immediately and bump tokenVersion
+      await RefreshToken.updateMany({ userId: record.userId }, { isRevoked: true });
+      await User.findByIdAndUpdate(record.userId, { $inc: { tokenVersion: 1 } });
+      throw ApiError.unauthorized('Security alert: Compromised refresh token detected. All active sessions invalidated. Please log in again.');
+    }
+
+    if (record.expiresAt < new Date()) {
+      throw ApiError.unauthorized('Refresh token has expired. Please log in again.');
     }
 
     // Revoke old token
@@ -416,13 +430,19 @@ export class AuthService {
   }
 
   /**
-   * Logs out user by revoking refresh token
+   * Logs out user by revoking refresh token and incrementing tokenVersion for instant JWT revocation
    */
   static async logout(refreshToken?: string, userId?: string): Promise<{ message: string }> {
     if (refreshToken) {
-      await RefreshToken.updateOne({ token: refreshToken }, { isRevoked: true });
+      const record = await RefreshToken.findOne({ token: refreshToken });
+      if (record) {
+        record.isRevoked = true;
+        await record.save();
+        await User.findByIdAndUpdate(record.userId, { $inc: { tokenVersion: 1 } });
+      }
     } else if (userId) {
       await RefreshToken.updateMany({ userId, isRevoked: false }, { isRevoked: true });
+      await User.findByIdAndUpdate(userId, { $inc: { tokenVersion: 1 } });
     }
 
     return { message: 'Logged out successfully' };

@@ -4,7 +4,6 @@ import {
   Trophy,
   Plus,
   Gift,
-  Sparkles,
   RefreshCw,
   CheckCircle2,
   Send,
