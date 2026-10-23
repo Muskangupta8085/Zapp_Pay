@@ -267,4 +267,22 @@ export const adminApi = {
   async getAuditLogs(page = 1, limit = 50) {
     return apiRequest<{ logs: any[]; total: number; page: number }>(`/admin/audit-logs?page=${page}&limit=${limit}`);
   },
+
+  // Platform & App Settings
+  async getAppConfig() {
+    return apiRequest<{ maintenanceMode: boolean; maintenanceMessage: string; minAppVersion: string; latestAppVersion: string; forceUpdate: boolean }>('/app/config');
+  },
+
+  async updateAppConfig(payload: {
+    maintenanceMode?: boolean;
+    maintenanceMessage?: string;
+    minAppVersion?: string;
+    latestAppVersion?: string;
+    forceUpdate?: boolean;
+  }) {
+    return apiRequest('/app/config', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
 };

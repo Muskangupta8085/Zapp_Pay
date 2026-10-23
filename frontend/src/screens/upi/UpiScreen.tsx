@@ -10,6 +10,7 @@ import {
   ImageBackground,
   Platform,
   Alert,
+  Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -67,12 +68,30 @@ export const UpiScreen: React.FC<UpiScreenProps> = ({
     }
   };
 
-  const handleOpenUpiApp = (appName: string) => {
+  const handleOpenUpiApp = async (appName: string) => {
+    const payeeVpa = 'zapppay@icici';
+    const payeeName = 'Zapp Pay Treasury';
+    const transactionNote = encodeURIComponent(`Deposit ${customAmount}`);
+    const upiUrl = `upi://pay?pa=${payeeVpa}&pn=${encodeURIComponent(payeeName)}&am=${customAmount}&cu=INR&tn=${transactionNote}`;
+
+    try {
+      const supported = await Linking.canOpenURL(upiUrl);
+      if (supported) {
+        await Linking.openURL(upiUrl);
+        return;
+      }
+    } catch {
+      // Fallback to instructions below if direct URI scheme is unavailable
+    }
+
     Alert.alert(
       `Launching ${appName}`,
-      `Please complete payment of ₹ ${customAmount} to zapppay@icici in ${appName}. Once paid, your funds will credit automatically.`,
+      `Please complete payment of ₹ ${customAmount} to ${payeeVpa} in ${appName}. Once paid, copy the 12-digit UTR/Ref number and paste it below to verify.`,
       [
-        { text: 'I Have Paid', onPress: () => Alert.alert('Deposit Processing', 'We are verifying your transaction. Status will update in Order History.') },
+        {
+          text: 'I Have Paid',
+          onPress: () => Alert.alert('Deposit Processing', 'Enter your 12-digit UTR number below and tap "Verify & Credit Deposit".'),
+        },
         { text: 'Cancel', style: 'cancel' },
       ]
     );

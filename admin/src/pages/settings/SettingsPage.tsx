@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Upload, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { ZappPayLogo, ZappPayIcon } from '../../components/common/ZappPayLogo';
+import { adminApi } from '../../api/adminApi';
 
 export const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -13,8 +14,32 @@ export const SettingsPage: React.FC = () => {
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const handleSave = (e: React.FormEvent) => {
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const res = await adminApi.getAppConfig();
+        if (res.success && res.data) {
+          if (res.data.maintenanceMode !== undefined) {
+            setMaintenanceMode(res.data.maintenanceMode);
+          }
+        }
+      } catch {
+        // Fallback to defaults
+      }
+    };
+    loadConfig();
+  }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    try {
+      await adminApi.updateAppConfig({
+        maintenanceMode,
+        maintenanceMessage: `${platformName} is undergoing scheduled maintenance. Trading will resume shortly.`,
+      });
+    } catch {
+      // Graceful fallback
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };

@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageHeader } from '../../components/layout/PageHeader';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { CheckCircle, XCircle } from 'lucide-react';
 import { Colors } from '../../constants/colors';
 import type { PaymentVerificationItem } from '../../types';
+import { adminApi } from '../../api/adminApi';
 
 export const PaymentVerifyPage: React.FC = () => {
   const [items, setItems] = useState<PaymentVerificationItem[]>([
@@ -38,6 +39,49 @@ export const PaymentVerifyPage: React.FC = () => {
       submittedAt: 'Yesterday, 03:40 PM',
     },
   ]);
+
+  useEffect(() => {
+    const fetchAccounts = async () => {
+      try {
+        const res = await adminApi.listUsers();
+        if (res.success && Array.isArray((res.data as any)?.users)) {
+          const liveItems: PaymentVerificationItem[] = [];
+          (res.data as any).users.forEach((u: any, idx: number) => {
+            if (u.bankAccount?.accountNumber) {
+              liveItems.push({
+                id: `PAY-${idx + 101}`,
+                userUid: u._id ? `UID-${u._id.slice(-5).toUpperCase()}` : 'UID-USR',
+                userName: u.fullName || u.email || 'Trader',
+                type: 'Bank Account',
+                details: `${u.bankAccount.bankName || 'Bank'} - ${u.bankAccount.accountNumber} (IFSC: ${u.bankAccount.ifsc || 'N/A'})`,
+                holderName: u.bankAccount.accountHolderName || u.fullName || 'User',
+                status: 'Verified',
+                submittedAt: 'Recent',
+              });
+            }
+            if (u.upiId) {
+              liveItems.push({
+                id: `PAY-UPI-${idx + 201}`,
+                userUid: u._id ? `UID-${u._id.slice(-5).toUpperCase()}` : 'UID-USR',
+                userName: u.fullName || u.email || 'Trader',
+                type: 'UPI VPA',
+                details: u.upiId,
+                holderName: u.fullName || 'User',
+                status: 'Verified',
+                submittedAt: 'Recent',
+              });
+            }
+          });
+          if (liveItems.length > 0) {
+            setItems(liveItems);
+          }
+        }
+      } catch {
+        // Fallback to default demo list
+      }
+    };
+    fetchAccounts();
+  }, []);
 
   const handleVerify = (id: string) => {
     setItems((prev) =>
